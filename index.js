@@ -1,11 +1,34 @@
 const express = require("express");
 const dotenv = require("dotenv");
-const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const QRCode = require("qrcode");
 
-const User = require("./MongooesSchema");
+// User Schema
+const userSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true
+    },
+    email: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    password: {
+        type: String,
+        required: true,
+    },
+    qrCodes: [
+        {
+            text: String,
+            qrImage: String,
+            createdAt: { type: Date, default: Date.now }
+        }
+    ]
+});
+
+const User = mongoose.model("User", userSchema);
 
 const app = express();
 dotenv.config();
@@ -17,94 +40,48 @@ app.get("/", (req, res) => {
     res.send("QR Code Generator Backend is Live");
 });
 
-app.post("/api/auth/registration", async (req, res) => {
-    let { name, email, password } = req.body;
-
-    try {
-        let user_found = await User.findOne({ email });
-
-        if (user_found) {
-            return res.status(409).send({
-                status: 409,
-                message: "User already exists"
-            });
-        }
-
-        let hashed_password = await bcrypt.hash(password, 10);
-        const newUser = new User({ name, email, password: hashed_password });
-        await newUser.save();
-
-        res.status(200).send({
-            status: 200,
-            message: `${name} registered successfully`
-        });
-    } catch (err) {
-        res.status(500).send({
-            status: 500,
-            message: "Registration failed",
-            Error: err
-        });
-    }
-});
-
-app.post("/api/auth/login", async (req, res) => {
-    try {
-        let { email, password } = req.body;
-        let user = await User.findOne({ email });
-
-        if (!user) {
-            return res.status(401).send({
-                status: 401,
-                message: "Invalid credentials"
-            });
-        }
-
-        let isMatch = await bcrypt.compare(password, user.password);
-
-        if (!isMatch) {
-            return res.status(401).send({
-                status: 401,
-                message: "Invalid credentials"
-            });
-        }
-
-        res.status(200).send({
-            status: 200,
-            message: `Welcome, ${user.name}`
-        });
-    } catch (err) {
-        res.status(500).send({
-            status: 500,
-            message: "Login failed",
-            Error: err
-        });
-    }
-});
-
 app.post("/api/generate_qr", async (req, res) => {
-    const { text, email } = req.body;
+    const { text, email, name } = req.body;
 
-    if (!text || !email) {
+    if (!text || !email || !name) {
         return res.status(400).send({
             status: 400,
-            message: "Text and email are required"
+            message: "Text, email, and name are required"
         });
     }
 
     try {
-        const user = await User.findOne({ email });
+        // Find user or create if doesn't exist
+        let user = await User.findOne({ email });
+        
         if (!user) {
-            return res.status(404).send({ status: 404, message: "User not found" });
+            // Create new user with a default password
+            user = new User({ 
+                name, 
+                email, 
+                password: "default" // Since auth is removed, using placeholder
+            });
+            await user.save();
         }
 
         const qrCodeURL = await QRCode.toDataURL(text);
 
-        user.qrCodes.push({ text, qrImage: qrCodeURL });
+        const newQR = {
+            text,
+            qrImage: qrCodeURL,
+            createdAt: new Date()
+        };
+
+        user.qrCodes.push(newQR);
         await user.save();
 
         res.status(200).send({
             status: 200,
-            qrCode: qrCodeURL
+            qrCode: qrCodeURL,
+            name: user.name,
+            email: user.email,
+            text,
+            createdAt: newQR.createdAt
         });
     } catch (error) {
         res.status(500).send({
@@ -115,20 +92,29 @@ app.post("/api/generate_qr", async (req, res) => {
     }
 });
 
-
 app.get("/api/qr-history", async (req, res) => {
     const { email } = req.query;
+
+    if (!email) {
+        return res.status(400).send({
+            status: 400,
+            message: "Email is required"
+        });
+    }
 
     try {
         const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(404).send({ status: 404, message: "User not found" });
+            return res.status(404).send({ 
+                status: 404, 
+                message: "User not found" 
+            });
         }
 
         res.status(200).send({
             status: 200,
-            qrHistory: user.qrCodes // ✅ this is how you access embedded QR codes
+            qrHistory: user.qrCodes
         });
     } catch (error) {
         res.status(500).send({
@@ -138,7 +124,6 @@ app.get("/api/qr-history", async (req, res) => {
         });
     }
 });
-
 
 mongoose.connect(process.env.MONGOOSE_CONNECTION)
     .then(() => {
