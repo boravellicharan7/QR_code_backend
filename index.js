@@ -51,15 +51,13 @@ app.post("/api/generate_qr", async (req, res) => {
     }
 
     try {
-        // Find user or create if doesn't exist
         let user = await User.findOne({ email });
         
         if (!user) {
-            // Create new user with a default password
             user = new User({ 
                 name, 
                 email, 
-                password: "default" // Since auth is removed, using placeholder
+                password: "default" 
             });
             await user.save();
         }
