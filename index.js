@@ -121,16 +121,24 @@ app.get("/api/qr-history", async (req, res) => {
 
     try {
         const user = await User.findOne({ email });
+
         if (!user) {
             return res.status(404).send({ status: 404, message: "User not found" });
         }
 
-        const qrHistory = await QR.find({ userId: user._id });
-        res.status(200).send({ status: 200, qrHistory });
+        res.status(200).send({
+            status: 200,
+            qrHistory: user.qrCodes // ✅ this is how you access embedded QR codes
+        });
     } catch (error) {
-        res.status(500).send({ status: 500, message: "Failed to fetch history", error });
+        res.status(500).send({
+            status: 500,
+            message: "Failed to fetch history",
+            error
+        });
     }
 });
+
 
 mongoose.connect(process.env.MONGOOSE_CONNECTION)
     .then(() => {
