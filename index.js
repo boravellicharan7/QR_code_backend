@@ -99,12 +99,8 @@ app.post("/api/generate_qr", async (req, res) => {
 
         const qrCodeURL = await QRCode.toDataURL(text);
 
-        const newQR = new QR({
-            userId: user._id,
-            text,
-            qrImage: qrCodeURL
-        });
-        await newQR.save();
+        user.qrCodes.push({ text, qrImage: qrCodeURL });
+        await user.save();
 
         res.status(200).send({
             status: 200,
@@ -118,6 +114,7 @@ app.post("/api/generate_qr", async (req, res) => {
         });
     }
 });
+
 
 app.get("/api/qr-history", async (req, res) => {
     const { email } = req.query;
