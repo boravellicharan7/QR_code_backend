@@ -82,17 +82,30 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/generate_qr", async (req, res) => {
-    const { text } = req.body;
+    const { text, email } = req.body;
 
-    if (!text || text.trim() === "") {
+    if (!text || !email) {
         return res.status(400).send({
             status: 400,
-            message: "Text input is required to generate a QR code"
+            message: "Text and email are required"
         });
     }
 
     try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).send({ status: 404, message: "User not found" });
+        }
+
         const qrCodeURL = await QRCode.toDataURL(text);
+
+        const newQR = new QR({
+            userId: user._id,
+            text,
+            qrImage: qrCodeURL
+        });
+        await newQR.save();
+
         res.status(200).send({
             status: 200,
             qrCode: qrCodeURL
@@ -103,6 +116,22 @@ app.post("/api/generate_qr", async (req, res) => {
             message: "QR Code generation failed",
             error
         });
+    }
+});
+
+app.get("/api/qr-history", async (req, res) => {
+    const { email } = req.query;
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).send({ status: 404, message: "User not found" });
+        }
+
+        const qrHistory = await QR.find({ userId: user._id });
+        res.status(200).send({ status: 200, qrHistory });
+    } catch (error) {
+        res.status(500).send({ status: 500, message: "Failed to fetch history", error });
     }
 });
 
